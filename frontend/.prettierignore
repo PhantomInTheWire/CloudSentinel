@@ -1,0 +1,5 @@
+eslint.config.mjs
+next.config.ts
+postcss.config.mjs
+package*.json
+tsconfig.json
