@@ -1,0 +1,1 @@
+Infrastructure configurations and Docker files for the CloudSentinel monorepo.
