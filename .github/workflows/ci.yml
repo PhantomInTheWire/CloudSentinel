@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+    branches: [master, dev]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: guard
+          POSTGRES_PASSWORD: guard
+          POSTGRES_DB: guard
+        options: >-
+          --health-cmd "pg_isready -U guard" 
+          --health-interval 10s 
+          --health-timeout 5s 
+          --health-retries 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ---------- Caching ----------
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('backend/ai/pyproject.toml') }}
+
+      # ---------- Go Checks ----------
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Go mod tidy check
+        run: |
+          cd backend/api && go mod tidy
+          cd ../worker && go mod tidy
+
+      - name: Go lint and format
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          cd backend/api && golangci-lint run
+          cd ../worker && golangci-lint run
+
+      - name: Go build check
+        run: |
+          cd backend/api && go build ./cmd/server
+          cd ../worker && go build ./cmd/worker
+
+      - name: Go tests
+        run: |
+          cd backend/api && go test ./...
+          cd ../worker && go test ./...
+
+      - name: Security scan (Go)
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          cd backend/api && gosec ./...
+          cd ../worker && gosec ./...
+
+      # ---------- Python Checks ----------
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Python lint + type check
+        run: |
+          cd backend/ai
+          uv venv
+          uv pip install fastapi uvicorn mypy ruff bandit pytest
+          uv run ruff check app/
+          uv run mypy app/
+
+      - name: Python tests
+        run: |
+          cd backend/ai
+          uv run pytest tests/
+
+      - name: Security scan (Python)
+        run: |
+          cd backend/ai
+          uv run bandit -r app/
+
+      # ---------- Frontend Checks ----------
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Frontend lint and format
+        run: |
+          cd frontend
+          npm install
+          npm run lint
+          npm run format:check
+
+      - name: Frontend tests
+        run: |
+          cd frontend
+          npm run test
+
+      - name: Security scan (Frontend)
+        run: |
+          cd frontend
+          npm audit --omit=dev || true
+
+      # ---------- Docker Build Test ----------
+      - name: Build Docker images
+        run: |
+          docker compose -f infra/docker-compose.yml build --no-cache
