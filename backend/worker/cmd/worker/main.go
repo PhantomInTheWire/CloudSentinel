@@ -1,3 +1,4 @@
+// Package main is the entry point for the CloudSentinel worker service.
 package main
 
 import (
