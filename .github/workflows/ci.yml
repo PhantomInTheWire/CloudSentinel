@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: guard
+          POSTGRES_PASSWORD: guard
+          POSTGRES_DB: guard
+        options: >-
+          --health-cmd "pg_isready -U guard" 
+          --health-interval 10s 
+          --health-timeout 5s 
+          --health-retries 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ---------- Go Checks ----------
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Go mod tidy check
+        run: |
+          cd backend/api && go mod tidy
+          cd ../worker && go mod tidy
+
+      - name: Go build check
+        run: |
+          cd backend/api && go build ./cmd/server
+          cd ../worker && go build ./cmd/worker
+
+      # ---------- Python Checks ----------
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Python lint + type check
+        run: |
+          cd backend/ai
+          uv venv
+          uv pip install fastapi uvicorn mypy dspy
+          uv run mypy app/
+
+      # ---------- Docker Build Test ----------
+      - name: Build Docker images
+        run: |
+          docker compose -f infra/docker-compose.yml build --no-cache
