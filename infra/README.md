@@ -25,9 +25,9 @@ All services use environment variables from `.env` in repo root.
 
 This section contains templates for deploying CloudSentinel infrastructure in AWS.
 
-### CloudFormation
+### CloudSentinel Template
 
-See [cloudformation/README.md](cloudformation/README.md) for deploying IAM roles via CloudFormation.
+See [cloudsentinel-template/README.md](cloudsentinel-template/README.md) for Terraform modules that handle user onboarding and provide reusable infrastructure components.
 
 ### Terraform
 
